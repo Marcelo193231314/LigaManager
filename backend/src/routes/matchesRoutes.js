@@ -1,5 +1,5 @@
 const express = require('express');
-// Importamos del archivo con "s" y carpeta con "s"
+
 const { getMatches, createMatch, updateMatchStatus } = require('../controllers/matchesController');
 
 const router = express.Router();
