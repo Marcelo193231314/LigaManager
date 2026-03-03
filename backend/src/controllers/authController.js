@@ -4,25 +4,35 @@ const jwt = require('jsonwebtoken');
 
 const register = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password, adminSecret } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
-        const userRole = role || 'user';
         
-        // 1. Guardamos al usuario/capitán en la tabla users
+        let userRole = 'user';
+        const SECRET_CODE = 'ViscaBarca'; 
+
+        
+        if (adminSecret !== undefined && adminSecret !== '') {
+            if (adminSecret === SECRET_CODE) {
+                userRole = 'admin'; 
+            } else {
+                return res.status(403).json({ error: 'Código secreto incorrecto. Registro denegado.' });
+            }
+        }
+        
         const [result] = await pool.query(
             'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
             [name, email, hashedPassword, userRole]
         );
         
-        // 2. ¡NUEVO! Si es un Capitán, creamos su equipo automáticamente en la tabla teams
+        
         if (userRole === 'user') {
             await pool.query(
                 'INSERT INTO teams (name, captain_id) VALUES (?, ?)',
-                [name, result.insertId] // El insertId es el ID del capitán que acabamos de crear
+                [name, result.insertId]
             );
         }
         
-        res.status(201).json({ message: 'Usuario y equipo registrados', userId: result.insertId });
+        res.status(201).json({ message: 'Registro exitoso', userId: result.insertId, role: userRole });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -30,7 +40,7 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, role } = req.body;
         const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
         
         if (users.length === 0) {
@@ -42,6 +52,10 @@ const login = async (req, res) => {
         
         if (!isValidPassword) {
             return res.status(401).json({ message: 'Contraseña incorrecta' });
+        }
+
+        if (role && user.role !== role) {
+            return res.status(403).json({ message: `Acceso denegado. No tienes permisos de ${role}.` });
         }
 
         const token = jwt.sign(
@@ -56,10 +70,8 @@ const login = async (req, res) => {
     }
 };
 
-// NUEVA FUNCIÓN: Obtener la lista de EQUIPOS (ya no usuarios)
 const getUsers = async (req, res) => {
     try {
-        // Ahora buscamos directamente en la tabla oficial de equipos
         const [teams] = await pool.query("SELECT id, name FROM teams");
         res.json(teams);
     } catch (error) {
@@ -67,4 +79,33 @@ const getUsers = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getUsers };
+
+const updateTeam = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        
+        await pool.query('UPDATE teams SET name = ? WHERE id = ?', [name, id]);
+        res.json({ message: 'Nombre del equipo actualizado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+const deleteTeam = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        
+        await pool.query('DELETE FROM matches WHERE local_team_id = ? OR visitor_team_id = ?', [id, id]);
+        
+        await pool.query('DELETE FROM teams WHERE id = ?', [id]);
+        
+        res.json({ message: 'Equipo y sus partidos eliminados correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports = { register, login, getUsers, updateTeam, deleteTeam };
