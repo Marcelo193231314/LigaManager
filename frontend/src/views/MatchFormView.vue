@@ -1,108 +1,118 @@
 <template>
-  <div class="form-container">
-    <h2>Programar Nuevo Partido</h2>
-    <form @submit.prevent="handleSubmit">
-      
-      <div>
-        <label>Equipo Local:</label>
-        <select v-model="local_team_id" required class="team-select">
-          <option value="" disabled>Selecciona al equipo local</option>
-          <option v-for="team in teams" :key="team.id" :value="team.id">
-            {{ team.name }}
-          </option>
-        </select>
-      </div>
+  <div class="container">
+    <div class="header">
+      <h1>Panel de Partidos</h1>
+      <button class="btn-logout" @click="logout">Cerrar Sesión</button>
+    </div>
 
-      <div>
-        <label>Equipo Visitante:</label>
-        <select v-model="visitor_team_id" required class="team-select">
-          <option value="" disabled>Selecciona al equipo visitante</option>
-          <option v-for="team in teams" :key="team.id" :value="team.id">
-            {{ team.name }}
-          </option>
-        </select>
-      </div>
+    <div class="actions" v-if="isAdmin">
+      <button class="btn-primary" @click="router.push('/create-match')">Crear Nuevo Partido</button>
+    </div>
 
-      <div>
-        <label>Fecha y Hora:</label>
-        <input type="datetime-local" v-model="match_date" required />
-      </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Local</th>
+            <th>Resultado</th>
+            <th>Visitante</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th v-if="isAdmin">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="match in matches" :key="match.id">
+            <td>{{ match.id }}</td>
+            <td><strong>{{ match.local_team_name }}</strong></td>
+            
+            <td>
+              <div v-if="isAdmin" class="score-container">
+                <input type="number" v-model="match.local_score" class="score-input">
+                <span>-</span>
+                <input type="number" v-model="match.visitor_score" class="score-input">
+              </div>
+              <div v-else class="score-text">
+                {{ match.local_score }} - {{ match.visitor_score }}
+              </div>
+            </td>
 
-      <div>
-        <label>Cancha:</label>
-        <input type="text" v-model="location" required />
-      </div>
+            <td><strong>{{ match.visitor_team_name }}</strong></td>
+            <td>{{ formatDate(match.match_date) }}</td>
+            
+            <td>
+              <select v-if="isAdmin" v-model="match.status" class="status-select">
+                <option value="Pendiente">Pendiente</option>
+                <option value="En Juego">En Juego</option>
+                <option value="Finalizado">Finalizado</option>
+              </select>
+              <span v-else class="status-badge">{{ match.status }}</span>
+            </td>
 
-      <div class="buttons">
-        <button type="submit" class="btn-submit">Guardar Partido</button>
-        <button type="button" class="btn-cancel" @click="goBack">Cancelar</button>
-      </div>
-    </form>
+            <td v-if="isAdmin">
+              <button @click="saveChanges(match)" class="btn-save" title="Guardar">💾</button>
+              <button @click="simulate(match)" class="btn-sim" title="Simular Resultado">🎲</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import api from '../services/api';
 
+const authStore = useAuthStore();
 const router = useRouter();
-const local_team_id = ref('');
-const visitor_team_id = ref('');
-const match_date = ref('');
-const location = ref('');
-const teams = ref([]);
+const matches = ref([]);
 
-// Cargar los equipos al abrir la pantalla
-const fetchTeams = async () => {
-  try {
-    const response = await api.get('/auth/users');
-    teams.value = response.data;
-  } catch (error) {
-    console.error('Error al cargar los equipos:', error);
-  }
+const isAdmin = computed(() => authStore.user?.role === 'admin');
+
+const fetchMatches = async () => {
+  const res = await api.get('/matches');
+  matches.value = res.data;
 };
 
-onMounted(() => {
-  fetchTeams();
-});
-
-const handleSubmit = async () => {
-  if (local_team_id.value === visitor_team_id.value) {
-    alert('El equipo local y visitante no pueden ser el mismo.');
-    return;
-  }
-
+const saveChanges = async (match) => {
   try {
-    const formattedDate = match_date.value.replace('T', ' ') + ':00';
-    await api.post('/matches', {
-      local_team_id: local_team_id.value,
-      visitor_team_id: visitor_team_id.value,
-      match_date: formattedDate,
-      location: location.value
+    await api.patch(`/matches/${match.id}/status`, {
+      status: match.status,
+      local_score: match.local_score,
+      visitor_score: match.visitor_score
     });
-    router.push('/');
-  } catch (error) {
-    alert('Error al crear el partido. Revisa que tu servidor este corriendo.');
-  }
+    alert("Guardado correctamente");
+  } catch (e) { alert("Error al guardar"); }
 };
 
-const goBack = () => {
-  router.push('/');
+const simulate = (match) => {
+  match.local_score = Math.floor(Math.random() * 5);
+  match.visitor_score = Math.floor(Math.random() * 5);
+  match.status = 'Finalizado';
+  saveChanges(match);
 };
+
+const formatDate = (str) => {
+  return new Date(str).toLocaleString('es-ES', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+};
+
+onMounted(fetchMatches);
+const logout = () => { authStore.logout(); router.push('/login'); };
 </script>
 
 <style scoped>
-.form-container { max-width: 500px; margin: 60px auto; padding: 30px; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); }
-h2 { text-align: center; color: #1a1a1a; margin-top: 0; margin-bottom: 25px; }
-div { margin-bottom: 15px; }
-label { display: block; margin-bottom: 5px; color: #555555; font-weight: 600; font-size: 14px; }
-input, .team-select { width: 100%; padding: 10px; border: 1px solid #dcdcdc; border-radius: 6px; box-sizing: border-box; font-family: inherit; font-size: 15px; }
-input:focus, .team-select:focus { outline: none; border-color: #0056b3; }
-.buttons { display: flex; gap: 10px; margin-top: 25px; }
-button { flex: 1; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
-.btn-submit { background-color: #0056b3; color: white; }
-.btn-submit:hover { background-color: #004494; }
-.btn-cancel { background-color: #f8f9fa; color: #333; border: 1px solid #ccc; }
-.btn-cancel:hover { background-color: #e2e6ea; }
+.container { max-width: 1000px; margin: 40px auto; font-family: sans-serif; }
+.header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.table-wrapper { background: white; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 15px; border-bottom: 1px solid #eee; text-align: center; }
+.score-container { display: flex; justify-content: center; align-items: center; gap: 5px; }
+.score-input { width: 35px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
+.btn-save, .btn-sim { background: none; border: none; cursor: pointer; font-size: 1.2rem; margin: 0 5px; }
+.status-select { padding: 5px; border-radius: 4px; }
+.btn-primary { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
 </style>
