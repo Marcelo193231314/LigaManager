@@ -1,21 +1,21 @@
 const pool = require('../config/db');
 
-// Obtener todos los partidos con nombres de equipos y resultados
+
 const getMatches = async (req, res) => {
     try {
         const query = `
             SELECT 
                 m.id, 
-                t1.name AS local_team_name, 
-                t2.name AS visitor_team_name, 
+                IFNULL(t1.name, 'Equipo Desconocido') AS local_team_name, 
+                IFNULL(t2.name, 'Equipo Desconocido') AS visitor_team_name, 
                 m.match_date, 
                 m.location, 
-                m.status,
-                m.local_score,
-                m.visitor_score
+                IFNULL(m.status, 'Pendiente') AS status,
+                IFNULL(m.local_score, 0) AS local_score,
+                IFNULL(m.visitor_score, 0) AS visitor_score
             FROM matches m
-            JOIN teams t1 ON m.local_team_id = t1.id
-            JOIN teams t2 ON m.visitor_team_id = t2.id
+            LEFT JOIN teams t1 ON m.local_team_id = t1.id
+            LEFT JOIN teams t2 ON m.visitor_team_id = t2.id
             ORDER BY m.match_date ASC
         `;
         const [matches] = await pool.query(query);
@@ -25,13 +25,17 @@ const getMatches = async (req, res) => {
     }
 };
 
-// Crear un partido
+
 const createMatch = async (req, res) => {
     try {
         const { local_team_id, visitor_team_id, match_date, location } = req.body;
+        
+        const defaultStatus = 'Pendiente';
+        const defaultScore = 0;
+
         const [result] = await pool.query(
-            'INSERT INTO matches (local_team_id, visitor_team_id, match_date, location) VALUES (?, ?, ?, ?)',
-            [local_team_id, visitor_team_id, match_date, location]
+            'INSERT INTO matches (local_team_id, visitor_team_id, match_date, location, status, local_score, visitor_score) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [local_team_id, visitor_team_id, match_date, location, defaultStatus, defaultScore, defaultScore]
         );
         res.status(201).json({ message: 'Partido creado', matchId: result.insertId });
     } catch (error) {
@@ -39,7 +43,7 @@ const createMatch = async (req, res) => {
     }
 };
 
-// Actualizar estado y resultados
+
 const updateMatchStatus = async (req, res) => {
     try {
         const { id } = req.params;
