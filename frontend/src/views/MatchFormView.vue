@@ -7,6 +7,7 @@
 
     <div class="actions" v-if="isAdmin">
       <button class="btn-primary" @click="router.push('/create-match')">Crear Nuevo Partido</button>
+      <button class="btn-secondary" @click="router.push('/teams')">Gestionar Equipos</button>
     </div>
 
     <div class="table-wrapper">
@@ -114,5 +115,6 @@ th, td { padding: 15px; border-bottom: 1px solid #eee; text-align: center; }
 .score-input { width: 35px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
 .btn-save, .btn-sim { background: none; border: none; cursor: pointer; font-size: 1.2rem; margin: 0 5px; }
 .status-select { padding: 5px; border-radius: 4px; }
-.btn-primary { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+.btn-primary { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; margin-right: 10px; }
+.btn-secondary { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
 </style>
