@@ -7,15 +7,19 @@ export const useAuthStore = defineStore('auth', {
         user: JSON.parse(localStorage.getItem('user')) || null
     }),
     actions: {
-        async register(name, email, password, role) {
-            await api.post('/auth/register', { name, email, password, role });
+        async register(name, email, password, adminSecret = '') {
+            await api.post('/auth/register', { name, email, password, adminSecret });
         },
-        async login(email, password) {
-            const response = await api.post('/auth/login', { email, password });
+        async login(email, password, role) {
+            const response = await api.post('/auth/login', { email, password, role });
+            
             this.token = response.data.token;
             this.user = response.data.user;
+            
             localStorage.setItem('token', this.token);
             localStorage.setItem('user', JSON.stringify(this.user));
+            
+            return this.user;
         },
         logout() {
             this.token = null;
