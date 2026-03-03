@@ -1,120 +1,108 @@
 <template>
   <div class="container">
-    <div class="header">
-      <h1>Panel de Partidos</h1>
-      <button class="btn-logout" @click="logout">Cerrar Sesión</button>
-    </div>
+    <h2>Crear Nuevo Partido</h2>
+    <form @submit.prevent="createMatch" class="form-card">
+      
+      <div class="form-group">
+        <label>Equipo Local:</label>
+        <select v-model="match.local_team_id" required>
+          <option value="" disabled>Selecciona un equipo</option>
+          <option v-for="team in teams" :key="team.id" :value="team.id">
+            {{ team.name }}
+          </option>
+        </select>
+      </div>
 
-    <div class="actions" v-if="isAdmin">
-      <button class="btn-primary" @click="router.push('/create-match')">Crear Nuevo Partido</button>
-      <button class="btn-secondary" @click="router.push('/teams')">Gestionar Equipos</button>
-    </div>
+      <div class="form-group">
+        <label>Equipo Visitante:</label>
+        <select v-model="match.visitor_team_id" required>
+          <option value="" disabled>Selecciona un equipo</option>
+          <option v-for="team in teams" :key="team.id" :value="team.id">
+            {{ team.name }}
+          </option>
+        </select>
+      </div>
 
-    <div class="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Local</th>
-            <th>Resultado</th>
-            <th>Visitante</th>
-            <th>Fecha</th>
-            <th>Estado</th>
-            <th v-if="isAdmin">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="match in matches" :key="match.id">
-            <td>{{ match.id }}</td>
-            <td><strong>{{ match.local_team_name }}</strong></td>
-            
-            <td>
-              <div v-if="isAdmin" class="score-container">
-                <input type="number" v-model="match.local_score" class="score-input">
-                <span>-</span>
-                <input type="number" v-model="match.visitor_score" class="score-input">
-              </div>
-              <div v-else class="score-text">
-                {{ match.local_score }} - {{ match.visitor_score }}
-              </div>
-            </td>
+      <div class="form-group">
+        <label>Fecha y Hora:</label>
+        <input type="datetime-local" v-model="match.match_date" required>
+      </div>
 
-            <td><strong>{{ match.visitor_team_name }}</strong></td>
-            <td>{{ formatDate(match.match_date) }}</td>
-            
-            <td>
-              <select v-if="isAdmin" v-model="match.status" class="status-select">
-                <option value="Pendiente">Pendiente</option>
-                <option value="En Juego">En Juego</option>
-                <option value="Finalizado">Finalizado</option>
-              </select>
-              <span v-else class="status-badge">{{ match.status }}</span>
-            </td>
+      <div class="form-group">
+        <label>Cancha (Ubicación):</label>
+        <input type="text" v-model="match.location" placeholder="Ej. Cancha 1" required>
+      </div>
 
-            <td v-if="isAdmin">
-              <button @click="saveChanges(match)" class="btn-save" title="Guardar">💾</button>
-              <button @click="simulate(match)" class="btn-sim" title="Simular Resultado">🎲</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <div class="buttons">
+        <button type="submit" class="btn-primary">Guardar Partido</button>
+        <button type="button" class="btn-secondary" @click="router.push('/')">Cancelar</button>
+      </div>
+    </form>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useAuthStore } from '../stores/auth';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../services/api';
 
-const authStore = useAuthStore();
 const router = useRouter();
-const matches = ref([]);
+const teams = ref([]);
+const match = ref({
+  local_team_id: '',
+  visitor_team_id: '',
+  match_date: '',
+  location: ''
+});
 
-const isAdmin = computed(() => authStore.user?.role === 'admin');
-
-const fetchMatches = async () => {
-  const res = await api.get('/matches');
-  matches.value = res.data;
-};
-
-const saveChanges = async (match) => {
+const fetchTeams = async () => {
   try {
-    await api.patch(`/matches/${match.id}/status`, {
-      status: match.status,
-      local_score: match.local_score,
-      visitor_score: match.visitor_score
-    });
-    alert("Guardado correctamente");
-  } catch (e) { alert("Error al guardar"); }
+    const res = await api.get('/teams'); // Ruta correcta para traer los equipos
+    teams.value = res.data;
+  } catch (error) {
+    console.error("Error al cargar los equipos", error);
+  }
 };
 
-const simulate = (match) => {
-  match.local_score = Math.floor(Math.random() * 5);
-  match.visitor_score = Math.floor(Math.random() * 5);
-  match.status = 'Finalizado';
-  saveChanges(match);
+const createMatch = async () => {
+  if (match.value.local_team_id === match.value.visitor_team_id) {
+    alert("Un equipo no puede jugar contra sí mismo");
+    return;
+  }
+  
+  try {
+    // ESTA ES LA MAGIA: Limpiamos la fecha para que MySQL la acepte sin chistar
+    const formattedDate = match.value.match_date.replace('T', ' ') + ':00';
+    
+    // Armamos el paquete de datos con la fecha ya corregida
+    const matchData = {
+      local_team_id: match.value.local_team_id,
+      visitor_team_id: match.value.visitor_team_id,
+      match_date: formattedDate,
+      location: match.value.location
+    };
+
+    // Enviamos el paquete corregido al backend
+    await api.post('/matches', matchData);
+    
+    alert("Partido creado con éxito");
+    router.push('/'); // Regresamos a la tabla
+  } catch (error) {
+    alert("Error al crear el partido");
+    console.error(error);
+  }
 };
 
-const formatDate = (str) => {
-  return new Date(str).toLocaleString('es-ES', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-};
-
-onMounted(fetchMatches);
-const logout = () => { authStore.logout(); router.push('/login'); };
+onMounted(fetchTeams);
 </script>
 
 <style scoped>
-.container { max-width: 1000px; margin: 40px auto; font-family: sans-serif; }
-.header { display: flex; justify-content: space-between; margin-bottom: 20px; }
-.table-wrapper { background: white; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 15px; border-bottom: 1px solid #eee; text-align: center; }
-.score-container { display: flex; justify-content: center; align-items: center; gap: 5px; }
-.score-input { width: 35px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
-.btn-save, .btn-sim { background: none; border: none; cursor: pointer; font-size: 1.2rem; margin: 0 5px; }
-.status-select { padding: 5px; border-radius: 4px; }
-.btn-primary { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; margin-right: 10px; }
-.btn-secondary { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+.container { max-width: 600px; margin: 40px auto; font-family: sans-serif; }
+.form-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+.form-group { margin-bottom: 20px; display: flex; flex-direction: column; }
+label { margin-bottom: 5px; font-weight: bold; }
+select, input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+.buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+.btn-primary { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+.btn-secondary { background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
 </style>
